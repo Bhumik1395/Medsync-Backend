@@ -31,6 +31,108 @@ import { updatePatientProfile, updateReportSummary } from "./data/dataStore.js";
 
 const app = express();
 
+function escapePdfText(value) {
+  return String(value)
+    .replace(/\\/g, "\\\\")
+    .replace(/\(/g, "\\(")
+    .replace(/\)/g, "\\)")
+    .replace(/\r?\n/g, " ");
+}
+
+function wrapPdfText(text, maxLength = 80) {
+  if (!text) {
+    return [];
+  }
+
+  const words = String(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const nextLine = currentLine ? `${currentLine} ${word}` : word;
+
+    if (nextLine.length > maxLength && currentLine) {
+      lines.push(currentLine);
+      currentLine = word;
+      continue;
+    }
+
+    currentLine = nextLine;
+  }
+
+  if (currentLine) {
+    lines.push(currentLine);
+  }
+
+  return lines;
+}
+
+function buildReportPdf(report) {
+  const lines = [
+    { fontSize: 18, text: "Medsync Medical Report" },
+    { fontSize: 12, text: `File Name: ${report.fileName}` },
+    { fontSize: 12, text: `Report Type: ${report.type}` },
+    { fontSize: 12, text: `Doctor: ${report.doctorName}` },
+    { fontSize: 12, text: `Generated On: ${new Date().toLocaleString("en-IN", { hour12: true })}` },
+    { fontSize: 12, text: "Findings:" },
+    ...wrapPdfText(report.findings || "No findings were added to this report yet.").map((text) => ({
+      fontSize: 11,
+      text
+    }))
+  ];
+
+  const contentStream = lines
+    .map((line, index) => {
+      const yPosition = 800 - index * 24;
+      return `BT
+/F1 ${line.fontSize} Tf
+50 ${yPosition} Td
+(${escapePdfText(line.text)}) Tj
+ET`;
+    })
+    .join("\n");
+
+  const objects = [
+    "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj",
+    "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj",
+    `4 0 obj\n<< /Length ${Buffer.byteLength(contentStream, "utf8")} >>\nstream\n${contentStream}\nendstream\nendobj`,
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj"
+  ];
+
+  let pdf = "%PDF-1.4\n";
+  const offsets = [];
+
+  for (const object of objects) {
+    offsets.push(Buffer.byteLength(pdf, "utf8"));
+    pdf += `${object}\n`;
+  }
+
+  const xrefOffset = Buffer.byteLength(pdf, "utf8");
+  pdf += `xref
+0 ${objects.length + 1}
+0000000000 65535 f 
+`;
+
+  for (const offset of offsets) {
+    pdf += `${String(offset).padStart(10, "0")} 00000 n 
+`;
+  }
+
+  pdf += `trailer
+<< /Size ${objects.length + 1} /Root 1 0 R >>
+startxref
+${xrefOffset}
+%%EOF`;
+
+  return Buffer.from(pdf, "utf8");
+}
+
+function getDownloadFileName(fileName) {
+  const normalizedFileName = fileName?.toLowerCase().endsWith(".pdf") ? fileName : `${fileName || "report"}.pdf`;
+  return normalizedFileName.replace(/[^a-zA-Z0-9._-]/g, "-");
+}
+
 app.use(requestLogger);
 app.use(rateLimit);
 app.use(
@@ -193,10 +295,11 @@ app.get("/api/reports/:id/download", async (req, res) => {
 
   await addAuditLog("download_report", req.user?.email || "anonymous", `Downloaded ${report.fileName}.`);
 
-  res.json({
-    downloadUrl: `/mock-downloads/${report.fileName}`,
-    fileName: report.fileName
-  });
+  const pdfBuffer = buildReportPdf(report);
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${getDownloadFileName(report.fileName)}"`);
+  res.send(pdfBuffer);
 });
 
 app.delete("/api/reports/:id", authorizeRole(["patient"]), async (req, res) => {
