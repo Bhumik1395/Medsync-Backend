@@ -410,6 +410,29 @@ export async function createReport({ doctorName, fileName, findings, patientId, 
   return mapReportRecord(data);
 }
 
+export async function deleteReport(reportId) {
+  if (!supabase) {
+    const reportIndex = db.reports.findIndex((report) => report.id === reportId);
+
+    if (reportIndex === -1) {
+      return null;
+    }
+
+    const [deletedReport] = db.reports.splice(reportIndex, 1);
+    return deletedReport;
+  }
+
+  const report = await getReportById(reportId);
+
+  if (!report) {
+    return null;
+  }
+
+  const { error } = await supabase.from("reports").delete().eq("report_id", reportId);
+  ensureNoSupabaseError(error, "Unable to delete report.");
+  return report;
+}
+
 export async function shareReport(reportId, shareTarget) {
   if (!supabase) {
     return shareMockReport(reportId, shareTarget);
