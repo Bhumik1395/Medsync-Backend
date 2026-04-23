@@ -10,6 +10,7 @@ import {
   getHospitalByUserId,
   getHospitalById,
   getPatientByAbha,
+  getPatientById,
   getPatientByUserId,
   getReportById,
   getReportsForPatient,
@@ -67,37 +68,117 @@ function wrapPdfText(text, maxLength = 80) {
   return lines;
 }
 
-function buildReportPdf(report) {
-  const lines = [
-    { fontSize: 18, text: "Medsync Medical Report" },
-    { fontSize: 12, text: `File Name: ${report.fileName}` },
-    { fontSize: 12, text: `Report Type: ${report.type}` },
-    { fontSize: 12, text: `Doctor: ${report.doctorName}` },
-    { fontSize: 12, text: `Generated On: ${new Date().toLocaleString("en-IN", { hour12: true })}` },
-    { fontSize: 12, text: "Findings:" },
-    ...wrapPdfText(report.findings || "No findings were added to this report yet.").map((text) => ({
-      fontSize: 11,
-      text
-    }))
-  ];
+function formatPdfDate(value) {
+  if (!value) {
+    return "Not available";
+  }
 
-  const contentStream = lines
-    .map((line, index) => {
-      const yPosition = 800 - index * 24;
-      return `BT
-/F1 ${line.fontSize} Tf
-50 ${yPosition} Td
-(${escapePdfText(line.text)}) Tj
-ET`;
-    })
-    .join("\n");
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "Not available";
+  }
+
+  return date.toLocaleString("en-IN", {
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    month: "short",
+    year: "numeric"
+  });
+}
+
+function buildReportPdf({ hospital, patient, report }) {
+  const hospitalName = hospital?.name || "Medsync Care Network";
+  const hospitalLocation = hospital?.location || "Digital Health Record System";
+  const reportDate = formatPdfDate(report.createdAt);
+  const findingsLines = wrapPdfText(report.findings || "No findings were added to this report yet.", 78);
+  const content = [];
+
+  const addText = (x, y, text, options = {}) => {
+    const { color = "0 0 0", font = "F1", size = 12 } = options;
+    content.push(`BT
+/${font} ${size} Tf
+${color} rg
+1 0 0 1 ${x} ${y} Tm
+(${escapePdfText(text)}) Tj
+ET`);
+  };
+
+  const addCenteredText = (y, text, options = {}) => {
+    const size = options.size || 12;
+    const approximateWidth = text.length * size * 0.28;
+    addText((595 - approximateWidth) / 2, y, text, options);
+  };
+
+  const addLine = (x1, y1, x2, y2, color = "0.72 0.72 0.72", width = 1) => {
+    content.push(`${width} w
+${color} RG
+${x1} ${y1} m
+${x2} ${y2} l
+S`);
+  };
+
+  const addBox = (x, y, width, height, strokeColor = "0.89 0.92 0.90") => {
+    content.push(`0.8 w
+${strokeColor} RG
+${x} ${y} ${width} ${height} re
+S`);
+  };
+
+  const addLabelValue = (x, y, label, value, valueWidth = 170) => {
+    addText(x, y, label, { color: "0.23 0.23 0.23", font: "F2", size: 11 });
+    const wrappedValues = wrapPdfText(value || "Not available", Math.max(18, Math.floor(valueWidth / 6)));
+
+    wrappedValues.forEach((line, index) => {
+      addText(x + 92, y - index * 14, line, { color: "0.15 0.15 0.15", size: 11 });
+    });
+  };
+
+  addLine(90, 810, 220, 810);
+  addLine(375, 810, 505, 810);
+  addCenteredText(805, "Medsync", { color: "0.60 0.60 0.60", font: "F2", size: 10 });
+  addCenteredText(782, hospitalName, { color: "0.24 0.61 0.44", font: "F2", size: 22 });
+  addCenteredText(764, hospitalLocation, { color: "0.35 0.35 0.35", size: 10 });
+  addCenteredText(708, "MEDICAL REPORT", { color: "0.07 0.07 0.07", font: "F2", size: 24 });
+
+  addBox(55, 560, 485, 118);
+  addText(70, 652, "Visit Info", { color: "0.24 0.61 0.44", font: "F2", size: 15 });
+  addLabelValue(70, 626, "Doctor's Name:", report.doctorName);
+  addLabelValue(315, 626, "Visit Date:", reportDate, 130);
+  addLabelValue(70, 598, "Report Type:", report.type);
+  addLabelValue(315, 598, "File Name:", report.fileName, 130);
+
+  addBox(55, 410, 485, 126);
+  addText(70, 510, "Patient Info", { color: "0.24 0.61 0.44", font: "F2", size: 15 });
+  addLabelValue(70, 484, "Full Name:", patient?.name);
+  addLabelValue(315, 484, "ABHA No.:", patient?.abhaNumber, 130);
+  addLabelValue(70, 456, "Age:", patient?.age ? String(patient.age) : "");
+  addLabelValue(315, 456, "Sex:", patient?.sex, 130);
+  addLabelValue(70, 428, "Blood Group:", patient?.bloodGroup);
+  addLabelValue(315, 428, "Phone:", patient?.phone, 130);
+
+  addBox(55, 90, 485, 292);
+  addText(70, 356, "Assessment", { color: "0.24 0.61 0.44", font: "F2", size: 15 });
+
+  findingsLines.forEach((line, index) => {
+    addText(72, 332 - index * 18, line, { color: "0.15 0.15 0.15", size: 11 });
+  });
+
+  addText(70, 130, "Generated digitally from doctor-uploaded report data.", {
+    color: "0.45 0.45 0.45",
+    size: 9
+  });
+
+  const contentStream = content.join("\n");
 
   const objects = [
     "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj",
     "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj",
-    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>\nendobj",
+    "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>\nendobj",
     `4 0 obj\n<< /Length ${Buffer.byteLength(contentStream, "utf8")} >>\nstream\n${contentStream}\nendstream\nendobj`,
-    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj"
+    "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj",
+    "6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj"
   ];
 
   let pdf = "%PDF-1.4\n";
@@ -295,7 +376,11 @@ app.get("/api/reports/:id/download", async (req, res) => {
 
   await addAuditLog("download_report", req.user?.email || "anonymous", `Downloaded ${report.fileName}.`);
 
-  const pdfBuffer = buildReportPdf(report);
+  const [patient, hospital] = await Promise.all([
+    report.patientId ? getPatientById(report.patientId) : null,
+    report.hospitalId ? getHospitalById(report.hospitalId) : null
+  ]);
+  const pdfBuffer = buildReportPdf({ hospital, patient, report });
 
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader("Content-Disposition", `attachment; filename="${getDownloadFileName(report.fileName)}"`);
