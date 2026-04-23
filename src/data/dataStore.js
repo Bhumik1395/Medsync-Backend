@@ -27,6 +27,18 @@ function generateAbhaNumber() {
   return String(Math.floor(100000000000 + Math.random() * 900000000000));
 }
 
+function normalizePatientAge(age) {
+  return age && age > 0 ? age : 0;
+}
+
+function normalizePatientBloodGroup(bloodGroup) {
+  return bloodGroup && bloodGroup !== "Unknown" ? bloodGroup : "";
+}
+
+function normalizePatientSex(sex) {
+  return sex && sex !== "Unspecified" ? sex : "";
+}
+
 function mapUserRecord(user) {
   if (!user) {
     return null;
@@ -50,14 +62,14 @@ function mapPatientRecord(patient, appointments = [], notifications = []) {
 
   return {
     abhaNumber: patient.abha_number,
-    age: patient.age ?? 0,
+    age: normalizePatientAge(patient.age),
     appointments: appointments.map((appointment) => ({
       date: appointment.appointment_date,
       department: appointment.department,
       id: appointment.appointment_id,
       status: appointment.status
     })),
-    bloodGroup: patient.blood_group ?? "Unknown",
+    bloodGroup: normalizePatientBloodGroup(patient.blood_group),
     history: patient.history ?? [],
     hospitalId: patient.hospital_id ?? null,
     id: patient.patient_id,
@@ -68,7 +80,7 @@ function mapPatientRecord(patient, appointments = [], notifications = []) {
       text: notification.text
     })),
     phone: patient.phone ?? "",
-    sex: patient.sex ?? ""
+    sex: normalizePatientSex(patient.sex)
   };
 }
 
@@ -168,14 +180,14 @@ export async function registerUser({ email, name, passwordHash, role }) {
   if (role === "patient") {
     const { error: patientError } = await supabase.from("patients").insert({
       abha_number: abhaNumber,
-      age: null,
-      blood_group: "",
+      age: 0,
+      blood_group: "Unknown",
       history: [],
       hospital_id: null,
       name,
       patient_id: randomUUID(),
       phone: "",
-      sex: "",
+      sex: "Unspecified",
       user_id: userId
     });
     ensureNoSupabaseError(patientError, "Unable to create patient profile.");
