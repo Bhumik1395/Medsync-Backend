@@ -141,6 +141,17 @@ export function findUserById(id) {
   return users.find((user) => user.id === id);
 }
 
+export function listInsuranceProviders() {
+  return users
+    .filter((user) => user.role === "insurance")
+    .map((user) => ({
+      email: user.email,
+      id: user.id,
+      name: user.name
+    }))
+    .sort((left, right) => left.name.localeCompare(right.name));
+}
+
 export function getPatientByUserId(userId) {
   return patients.find((patient) => patient.userId === userId);
 }
