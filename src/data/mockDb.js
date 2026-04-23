@@ -192,9 +192,9 @@ export function registerUser({ email, name, passwordHash: nextPasswordHash, role
       userId: user.id,
       name,
       abhaNumber: user.abhaNumber,
-      age: 30,
-      bloodGroup: "Unknown",
-      hospitalId: "hospital-1",
+      age: 0,
+      bloodGroup: "",
+      hospitalId: null,
       history: [],
       appointments: [],
       notifications: []
