@@ -15,6 +15,7 @@ import {
   getReportById,
   getReportsForPatient,
   isSupabaseEnabled,
+  listInsuranceProviders,
   listHospitalPatients,
   listInsuranceRecords,
   registerUser,
@@ -426,7 +427,7 @@ app.post("/api/reports/share", validateRequiredFields(["reportId", "shareTarget"
 app.post(
   "/api/patient/forward-report",
   authorizeRole(["patient"]),
-  validateRequiredFields(["policyNumber", "reportId"]),
+  validateRequiredFields(["insuranceUserId", "policyNumber", "reportId"]),
   async (req, res) => {
     const patient = await getPatientByUserId(req.user.id);
 
@@ -447,6 +448,7 @@ app.post(
     const submission = await createInsuranceSubmission({
       forwardedByUserId: req.user.id,
       hospitalId: report.hospitalId,
+      insuranceUserId: req.body.insuranceUserId,
       patientId: patient.id,
       policyNumber: String(req.body.policyNumber).trim(),
       reportId: report.id
@@ -463,6 +465,12 @@ app.post(
     });
   }
 );
+
+app.get("/api/insurance/providers", authorizeRole(["patient"]), async (_req, res) => {
+  res.json({
+    providers: await listInsuranceProviders()
+  });
+});
 
 app.get("/api/hospital/patients", authorizeRole(["hospital"]), async (req, res) => {
   res.json({
