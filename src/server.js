@@ -5,6 +5,7 @@ import {
   addAuditLog,
   createInsuranceSubmission,
   createReport,
+  deleteReport,
   findUserByEmail,
   getHospitalByUserId,
   getHospitalById,
@@ -195,6 +196,31 @@ app.get("/api/reports/:id/download", async (req, res) => {
   res.json({
     downloadUrl: `/mock-downloads/${report.fileName}`,
     fileName: report.fileName
+  });
+});
+
+app.delete("/api/reports/:id", authorizeRole(["patient"]), async (req, res) => {
+  const patient = await getPatientByUserId(req.user.id);
+
+  if (!patient) {
+    return res.status(404).json({
+      error: "Patient profile not found."
+    });
+  }
+
+  const report = await getReportById(req.params.id);
+
+  if (!report || report.patientId !== patient.id) {
+    return res.status(404).json({
+      error: "Report not found for this patient."
+    });
+  }
+
+  await deleteReport(report.id);
+  await addAuditLog("delete_report", req.user.email, `Deleted report ${report.id} (${report.fileName}).`);
+
+  res.json({
+    deletedReportId: report.id
   });
 });
 
