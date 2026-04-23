@@ -166,18 +166,16 @@ export async function registerUser({ email, name, passwordHash, role }) {
   ensureNoSupabaseError(userError, "Unable to create user.");
 
   if (role === "patient") {
-    const { data: hospital } = await supabase.from("hospitals").select("hospital_id").limit(1).maybeSingle();
-
     const { error: patientError } = await supabase.from("patients").insert({
       abha_number: abhaNumber,
-      age: 30,
-      blood_group: "O+",
+      age: null,
+      blood_group: "",
       history: [],
-      hospital_id: hospital?.hospital_id ?? null,
+      hospital_id: null,
       name,
       patient_id: randomUUID(),
       phone: "",
-      sex: "Male",
+      sex: "",
       user_id: userId
     });
     ensureNoSupabaseError(patientError, "Unable to create patient profile.");
