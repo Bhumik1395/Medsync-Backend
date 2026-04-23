@@ -39,6 +39,58 @@ function normalizePatientSex(sex) {
   return sex && sex !== "Unspecified" ? sex : "";
 }
 
+async function fetchPatientRowByUserId(userId) {
+  const { data: patient, error: patientError } = await supabase
+    .from("patients")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  ensureNoSupabaseError(patientError, "Unable to load patient profile.");
+  return patient;
+}
+
+async function ensurePatientProfileForUser(userId) {
+  const user = await findUserById(userId);
+
+  if (!user || user.role !== "patient") {
+    return null;
+  }
+
+  let patient = await fetchPatientRowByUserId(userId);
+
+  if (patient || !supabase) {
+    return patient ? mapPatientRecord(patient) : null;
+  }
+
+  const abhaNumber = user.abhaNumber || generateAbhaNumber();
+
+  const { error: userError } = await supabase
+    .from("users")
+    .update({
+      abha_number: abhaNumber,
+      updated_at: new Date().toISOString()
+    })
+    .eq("user_id", userId);
+  ensureNoSupabaseError(userError, "Unable to repair patient user record.");
+
+  const { error: patientError } = await supabase.from("patients").insert({
+    abha_number: abhaNumber,
+    age: 0,
+    blood_group: "Unknown",
+    history: [],
+    hospital_id: null,
+    name: user.name,
+    patient_id: randomUUID(),
+    phone: "",
+    sex: "Unspecified",
+    user_id: userId
+  });
+  ensureNoSupabaseError(patientError, "Unable to create missing patient profile.");
+
+  patient = await fetchPatientRowByUserId(userId);
+  return patient ? mapPatientRecord(patient) : null;
+}
+
 function mapUserRecord(user) {
   if (!user) {
     return null;
@@ -219,15 +271,10 @@ export async function getPatientByUserId(userId) {
     return getMockPatientByUserId(userId);
   }
 
-  const { data: patient, error: patientError } = await supabase
-    .from("patients")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-  ensureNoSupabaseError(patientError, "Unable to load patient profile.");
+  let patient = await fetchPatientRowByUserId(userId);
 
   if (!patient) {
-    return null;
+    return ensurePatientProfileForUser(userId);
   }
 
   const [{ data: appointments, error: appointmentsError }, { data: notifications, error: notificationsError }] =
@@ -575,7 +622,7 @@ export async function updatePatientProfile(userId, profile) {
     };
   }
 
-  const patient = await getPatientByUserId(userId);
+  const patient = (await getPatientByUserId(userId)) || (await ensurePatientProfileForUser(userId));
 
   if (!patient) {
     return null;
