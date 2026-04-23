@@ -10,6 +10,7 @@ import {
   getPatientByUserId as getMockPatientByUserId,
   getReportById as getMockReportById,
   getReportsForPatient as getMockReportsForPatient,
+  listInsuranceProviders as listMockInsuranceProviders,
   registerUser as registerMockUser,
   shareReport as shareMockReport
 } from "./mockDb.js";
@@ -490,6 +491,25 @@ export async function createInsuranceSubmission({
     .single();
   ensureNoSupabaseError(error, "Unable to create insurance submission.");
   return mapInsuranceSubmissionRecord(data);
+}
+
+export async function listInsuranceProviders() {
+  if (!supabase) {
+    return listMockInsuranceProviders();
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("user_id, name, email")
+    .eq("role", "insurance")
+    .order("name", { ascending: true });
+  ensureNoSupabaseError(error, "Unable to load insurance providers.");
+
+  return (data || []).map((provider) => ({
+    email: provider.email,
+    id: provider.user_id,
+    name: provider.name
+  }));
 }
 
 export async function updateReportSummary(reportId, summary) {
