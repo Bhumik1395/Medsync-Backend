@@ -13,7 +13,8 @@ function requireEnv(name, fallback = "") {
 }
 
 export const env = {
-  apiPort: Number(process.env.API_PORT || 4000),
+ 
+  apiPort: Number(process.env.PORT || process.env.API_PORT || 4000),
   jwtSecret: requireEnv("JWT_SECRET"),
   openAiApiKey: requireEnv("OPENAI_API_KEY"),
   supabaseUrl: requireEnv("SUPABASE_URL"),
