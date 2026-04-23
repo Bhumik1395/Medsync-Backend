@@ -165,11 +165,6 @@ S`);
     addText(72, 332 - index * 18, line, { color: "0.15 0.15 0.15", size: 11 });
   });
 
-  addText(70, 130, "Generated digitally from doctor-uploaded report data.", {
-    color: "0.45 0.45 0.45",
-    size: 9
-  });
-
   const contentStream = content.join("\n");
 
   const objects = [
